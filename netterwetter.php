@@ -48,12 +48,12 @@ usort($rows, fn($a, $b) => strcmp($a['startTime'], $b['startTime']));   // ascen
 // 2.  Prepare metric definitions & ranges
 // ----------------------------------------------------
 $metrics = [
-    'temperatureApparent'   => ['label' => 'Apparent Temp (°C)',   'color' => '#FFD600'],
-    'temperature'           => ['label' => 'Temperature (°C)',     'color' => '#FF9800'],
-    'humidity'              => ['label' => 'Humidity (%)',         'color' => '#00B0FF'],
-    'precipitationIntensity'=> ['label' => 'Precip (mm/hr)',       'color' => '#0D47A1'],
-    'windSpeed'             => ['label' => 'Wind (m/s)',           'color' => '#757575'],
-    'windGust'              => ['label' => 'Wind Gust (m/s)',      'color' => '#BDBDBD'],
+    'temperatureApparent'   => ['label' => 'Apparent Temp (°C)',   'color' => '#FFD600'],
+    'temperature'           => ['label' => 'Temperature (°C)',     'color' => '#FF9800'],
+    'humidity'              => ['label' => 'Humidity (%)',         'color' => '#00B0FF'],
+    'precipitationIntensity'=> ['label' => 'Precip (mm/hr)',       'color' => '#0D47A1'],
+    'windSpeed'             => ['label' => 'Wind (m/s)',           'color' => '#757575'],
+    'windGust'              => ['label' => 'Wind Gust (m/s)',      'color' => '#BDBDBD'],
 ];
 
 $ranges = [];
@@ -70,9 +70,9 @@ foreach ($metrics as $key => $_) {
         $min = 0;
     }
     if ($key === 'precipitationIntensity') {
-        $max = ceil($max / 2) * 2;              // round to 2 mm/hr grid
+        $max = ceil($max / 2) * 2;              // round to 2 mm/hr grid
     } elseif (in_array($key, ['windSpeed', 'windGust'], true)) {
-        $max = ceil($max / 5) * 5;              // 5 m/s grid
+        $max = ceil($max / 5) * 5;              // 5 m/s grid
     }
     if ($max === $min) {
         $max = $min + 1;                        // avoid div/0
@@ -95,7 +95,7 @@ foreach (array_keys($metrics) as $key) {
     $jsSeries[$key] = $arr;
 }
 
-// SVG dimensions / padding
+// SVG dimensions / padding
 $W  = 1200;
 $H  = 600;
 $PAD_L = 60; $PAD_R = 20; $PAD_T = 20; $PAD_B = 40;
@@ -143,7 +143,7 @@ function y(float $value, string $metricKey, array $range, int $PAD_T, int $PLOT_
 </head>
 <body>
 
-<h2>Weather graph for <?=htmlspecialchars($location)?> (<?=count($rows)?> points)</h2>
+<h2>Weather graph for <?=htmlspecialchars($location)?> (<?=count($rows)?> points)</h2>
 
 <div class="file-list">
     <?php foreach ($files as $f): ?>
