@@ -12,6 +12,13 @@
  * - Shows interactive SVG line graph for several metrics
  * - Defaults to most‑recent file when none selected
  * - Hover graph to get values (cross‑hair, dots, numeric labels)
+ * 
+ * Changes (2025‑07‑02):
+ *   • Each day starts at 00:00 exactly and is rendered 400 px wide.
+ *   • Time labels every 3 h (00:00, 03:00, 06:00 … 21:00).
+ *   • 00:00 grid line is dark‑grey; other 3 h lines are light‑grey.
+ *   • At 12:00 of each day a day‑label is drawn below the time label (e.g. “Friday 4.7.2025”).
+ *   • Tooltip values now carry units (°C, %, mm/h, m/s).
  *
  */
 
@@ -22,8 +29,8 @@ declare(strict_types=1);
 // ----------------------------------------------------
 $files = glob('data/20*/weather*_minimized.json') ?: [];
 // newest first (lexicographic ‑> date based)
-rsort($files, SORT_NATURAL);
-$selectedFile = null;
+rsort($files, SORT_NATURAL);               // newest first (lexicographic ok)
+$selectedFile = $files[0] ?? null;
 if (isset($_GET['file']) && in_array($_GET['file'], $files, true)) {
     $selectedFile = $_GET['file'];
 } elseif ($files) {
@@ -44,16 +51,28 @@ $location = array_key_first($raw['dataforlocations']);
 $rows     = $raw['dataforlocations'][$location] ?? [];
 usort($rows, fn($a, $b) => strcmp($a['startTime'], $b['startTime']));   // ascending
 
+// gather all timestamps (UTC) & compute unique day starts
+$times = array_map(fn($r) => strtotime($r['startTime']), $rows);
+$midnights = [];
+foreach ($times as $ts) {
+    $mid = strtotime(gmdate('Y-m-d 00:00:00', $ts));
+    $midnights[$mid] = true;
+}
+ksort($midnights);
+$dayStarts = array_keys($midnights);
+$dayCount  = count($dayStarts);
+$firstDayStart = $dayStarts[0];
+
 // ----------------------------------------------------
 // 2.  Prepare metric definitions & ranges
 // ----------------------------------------------------
 $metrics = [
-    'temperatureApparent'   => ['label' => 'Apparent Temp (°C)',   'color' => '#FFD600'],
-    'temperature'           => ['label' => 'Temperature (°C)',     'color' => '#FF9800'],
-    'humidity'              => ['label' => 'Humidity (%)',         'color' => '#00B0FF'],
-    'precipitationIntensity'=> ['label' => 'Precip (mm/hr)',       'color' => '#0D47A1'],
-    'windSpeed'             => ['label' => 'Wind (m/s)',           'color' => '#757575'],
-    'windGust'              => ['label' => 'Wind Gust (m/s)',      'color' => '#BDBDBD'],
+    'temperatureApparent'    => ['label' => 'Apparent Temp (°C)', 'color' => '#FFD600', 'unit' => '°C'],
+    'temperature'            => ['label' => 'Temperature (°C)',   'color' => '#FF9800', 'unit' => '°C'],
+    'humidity'               => ['label' => 'Humidity (%)',       'color' => '#00B0FF', 'unit' => '%'],
+    'precipitationIntensity' => ['label' => 'Precip (mm/h)',      'color' => '#0D47A1', 'unit' => 'mm/h'],
+    'windSpeed'              => ['label' => 'Wind (m/s)',         'color' => '#757575', 'unit' => 'm/s'],
+    'windGust'               => ['label' => 'Wind Gust (m/s)',    'color' => '#BDBDBD', 'unit' => 'm/s'],
 ];
 
 $ranges = [];
@@ -62,11 +81,11 @@ foreach ($metrics as $key => $_) {
     $values = array_values(array_filter($values, 'is_numeric'));
 
     // default min/max
-    $min = $key === 'humidity' ? 0 : (count($values) ? min($values) : 0);
-    $max = count($values) ? max($values) : 0;
 
     // special axis treatment
     if (in_array($key, ['windSpeed', 'windGust', 'precipitationIntensity'], true)) {
+    $min = ($key === 'humidity') ? 0 : (count($vals) ? min($vals) : 0);
+    $max = count($vals) ? max($vals) : 0;
         $min = 0;
     }
     if ($key === 'precipitationIntensity') {
@@ -81,7 +100,7 @@ foreach ($metrics as $key => $_) {
 }
 
 // ----------------------------------------------------
-// 3.  Build shared arrays for JS
+// 3.  Geometry helpers
 // ----------------------------------------------------
 $times = [];
 foreach ($rows as $r) { $times[] = strtotime($r['startTime']); }
