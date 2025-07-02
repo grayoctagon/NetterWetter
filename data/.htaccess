@@ -1,0 +1,3 @@
+Order Allow,Deny
+Deny from all
+ErrorDocument 403 "this is a 403 error"
