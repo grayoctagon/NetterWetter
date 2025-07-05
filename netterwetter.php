@@ -83,9 +83,9 @@ foreach ($metrics as $key => $_) {
     // default min/max
 
     // special axis treatment
+    $min = ($key === 'humidity') ? 0 : (count($values) ? min($values) : 0);
+    $max = count($values) ? max($values) : 0;
     if (in_array($key, ['windSpeed', 'windGust', 'precipitationIntensity'], true)) {
-    $min = ($key === 'humidity') ? 0 : (count($vals) ? min($vals) : 0);
-    $max = count($vals) ? max($vals) : 0;
         $min = 0;
     }
     if ($key === 'precipitationIntensity') {
@@ -102,8 +102,6 @@ foreach ($metrics as $key => $_) {
 // ----------------------------------------------------
 // 3.  Geometry helpers
 // ----------------------------------------------------
-$times = [];
-foreach ($rows as $r) { $times[] = strtotime($r['startTime']); }
 
 $jsSeries = [];
 foreach (array_keys($metrics) as $key) {
@@ -145,7 +143,7 @@ function y(float $value, string $metricKey, array $range, int $PAD_T, int $PLOT_
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Weather Graph – <?=htmlspecialchars($selectedFile)?></title>
+<title>NetterWetter – <?=htmlspecialchars($selectedFile)?></title>
 <style>
     body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:1rem;}
     .file-list{margin-bottom:1rem;}
