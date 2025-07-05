@@ -67,12 +67,12 @@ $firstDayStart = $dayStarts[0];
 // 2.  Prepare metric definitions & ranges
 // ----------------------------------------------------
 $metrics = [
-    'temperatureApparent'    => ['label' => 'Apparent Temp (°C)', 'color' => '#FFD600', 'unit' => '°C'],
-    'temperature'            => ['label' => 'Temperature (°C)',   'color' => '#FF9800', 'unit' => '°C'],
-    'humidity'               => ['label' => 'Humidity (%)',       'color' => '#00B0FF', 'unit' => '%'],
-    'precipitationIntensity' => ['label' => 'Precip (mm/h)',      'color' => '#0D47A1', 'unit' => 'mm/h'],
-    'windSpeed'              => ['label' => 'Wind (m/s)',         'color' => '#757575', 'unit' => 'm/s'],
-    'windGust'               => ['label' => 'Wind Gust (m/s)',    'color' => '#BDBDBD', 'unit' => 'm/s'],
+    'windGust'               => ['label' => 'Wind Gust (m/s)',    'color' => '#BDBDBD', 'unit' => 'm/s',  "strokewidth" => 1.5],
+    'windSpeed'              => ['label' => 'Wind (m/s)',         'color' => '#757575', 'unit' => 'm/s',  "strokewidth" => 1.5],
+    'humidity'               => ['label' => 'Humidity (%)',       'color' => '#00B0FF', 'unit' => '%',    "strokewidth" => 1.5],
+    'precipitationIntensity' => ['label' => 'Precip (mm/h)',      'color' => '#0D47A1', 'unit' => 'mm/h', "strokewidth" => 3],
+    'temperatureApparent'    => ['label' => 'Apparent Temp (°C)', 'color' => '#FFD600', 'unit' => '°C',   "strokewidth" => 4],
+    'temperature'            => ['label' => 'Temperature (°C)',   'color' => '#FF9800', 'unit' => '°C',   "strokewidth" => 2],
 ];
 
 $ranges = [];
@@ -81,11 +81,9 @@ foreach ($metrics as $key => $_) {
     $values = array_values(array_filter($values, 'is_numeric'));
 
     // default min/max
-
-    // special axis treatment
     $min = ($key === 'humidity') ? 0 : (count($values) ? min($values) : 0);
     $max = count($values) ? max($values) : 0;
-    if (in_array($key, ['windSpeed', 'windGust', 'precipitationIntensity'], true)) {
+    if (in_array($key, ['windSpeed','windGust','precipitationIntensity'], true)) {
         $min = 0;
     }
     if ($key === 'precipitationIntensity') {
@@ -102,37 +100,33 @@ foreach ($metrics as $key => $_) {
 // ----------------------------------------------------
 // 3.  Geometry helpers
 // ----------------------------------------------------
+$DAY_PX = 400;
+$PAD_L = 60; $PAD_R = 20; $PAD_T = 20; $PAD_B = 55; // extra space for two‑line labels
+$PLOT_W = $dayCount * $DAY_PX;
+$PLOT_H = 600 - $PAD_T - $PAD_B;          // keep overall height 600
+$W      = $PAD_L + $PLOT_W + $PAD_R;      // full SVG width
+$H      = 600;
 
+// X‑coords for every data point
+$xCoords = [];
+foreach ($times as $ts) {
+    $dayIdx = intdiv($ts - $firstDayStart, 86400);
+    $secsIntoDay = $ts - ($firstDayStart + $dayIdx*86400);
+    $xCoords[] = $PAD_L + $dayIdx*$DAY_PX + ($secsIntoDay / 86400) * $DAY_PX;
+}
+
+// Y‑coord helper
+function y(float $val, string $key, array $ranges, int $PAD_T, int $PLOT_H): float {
+    [$min,$max] = [$ranges[$key]['min'],$ranges[$key]['max']];
+    return $PAD_T + (1 - ($val - $min)/($max - $min)) * $PLOT_H;
+}
+
+// Prepare JS series arrays
 $jsSeries = [];
 foreach (array_keys($metrics) as $key) {
     $arr = [];
-    foreach ($rows as $r) {
-        $arr[] = array_key_exists($key, $r) ? $r[$key] : null;
-    }
+    foreach ($rows as $r) { $arr[] = $r[$key] ?? null; }
     $jsSeries[$key] = $arr;
-}
-
-// SVG dimensions / padding
-$W  = 1200;
-$H  = 600;
-$PAD_L = 60; $PAD_R = 20; $PAD_T = 20; $PAD_B = 40;
-$PLOT_W = $W - $PAD_L - $PAD_R;
-$PLOT_H = $H - $PAD_T - $PAD_B;
-
-// timeline
-$startTs = $times[0];
-$endTs   = end($times);
-$totalH  = max(1, ($endTs - $startTs) / 3600);
-
-// pre‑compute x coordinates for all timestamps
-$xCoords = array_map(function(int $ts) use ($startTs, $PLOT_W, $PAD_L, $totalH) {
-    return $PAD_L + ($ts - $startTs) / 3600 / $totalH * $PLOT_W;
-}, $times);
-
-// helper to scale y
-function y(float $value, string $metricKey, array $range, int $PAD_T, int $PLOT_H): float {
-    [$min,$max] = [$range[$metricKey]['min'],$range[$metricKey]['max']];
-    return $PAD_T + (1 - ($value - $min)/($max - $min)) * $PLOT_H;
 }
 
 // ----------------------------------------------------
@@ -143,15 +137,15 @@ function y(float $value, string $metricKey, array $range, int $PAD_T, int $PLOT_
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>NetterWetter – <?=htmlspecialchars($selectedFile)?></title>
+<title>NetterWetter - <?=htmlspecialchars($selectedFile)?></title>
 <style>
     body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:1rem;}
     .file-list{margin-bottom:1rem;}
     .file-list a{margin-right:.5rem;text-decoration:none;padding:.25rem .5rem;border:1px solid #ccc;border-radius:4px;}
     .file-list a.active{background:#1976d2;color:#fff;}
     svg text{font-size:10px;fill:#555;}
-    .grid-major{stroke:#000;stroke-width:1;}
-    .grid-minor{stroke:#e0e0e0;stroke-width:1;}
+    .grid-midnight{stroke:#424242;stroke-width:1;}
+    .grid-3h   {stroke:#e0e0e0;stroke-width:1;}
     .grid-y    {stroke:#ccc;stroke-width:1;}
     .crosshair {stroke:#aaa;stroke-width:1;visibility:hidden;pointer-events:none;}
     .dot       {visibility:hidden;pointer-events:none;stroke:#fff;stroke-width:1;}
@@ -159,137 +153,110 @@ function y(float $value, string $metricKey, array $range, int $PAD_T, int $PLOT_
 </style>
 </head>
 <body>
-
 <h2>Weather graph for <?=htmlspecialchars($location)?> (<?=count($rows)?> points)</h2>
-
 <div class="file-list">
     <?php foreach ($files as $f): ?>
-        <?php $active = $f === $selectedFile ? 'active' : ''; ?>
-        <a class="<?=$active?>" href="?file=<?=urlencode($f)?>"><?=htmlspecialchars($f)?></a>
+        <a class="<?=$f===$selectedFile?'active':'';?>" href="?file=<?=urlencode($f)?>"><?=htmlspecialchars($f)?></a>
     <?php endforeach; ?>
 </div>
-
-<svg id="chart" viewBox="0 0 <?=$W?> <?=$H?>" width="100%" height="auto">
+<div style="overflow-x:auto;">
+<svg id="chart" viewBox="0 0 <?=$W?> <?=$H?>" width="<?=$W?>" height="<?=$H?>">
     <!-- horizontal Y% grid -->
     <?php foreach ([0,25,50,75,100] as $pct):
         $y = $PAD_T + (1 - $pct/100) * $PLOT_H; ?>
         <line x1="<?=$PAD_L?>" y1="<?=$y?>" x2="<?=$PAD_L + $PLOT_W?>" y2="<?=$y?>" class="grid-y" />
     <?php endforeach; ?>
 
-    <!-- X axis minor (3‑hour) & major (day) grid -->
-    <?php
-        $h = 0;
-        for ($ts=$startTs; $ts<=$endTs; $ts+=10800, $h+=3) { // 3 hrs
-            $x = $PAD_L + ($ts-$startTs)/3600/$totalH*$PLOT_W;
-            $isDayBoundary = ( (int)gmdate('H',$ts) === 0);
-            $cls = $isDayBoundary ? 'grid-major' : 'grid-minor';
-            echo "<line x1='$x' y1='$PAD_T' x2='$x' y2='".($PAD_T+$PLOT_H)."' class='$cls' />";
+    <!-- vertical day + 3h grid & labels -->
+    <?php foreach ($dayStarts as $dIdx=>$mid):
+        $dayX = $PAD_L + $dIdx*$DAY_PX;
+        // midnight line
+        echo "<line x1='$dayX' y1='$PAD_T' x2='$dayX' y2='".($PAD_T+$PLOT_H)."' class='grid-midnight' />";
+        // label 00:00
+        $lblY = $PAD_T + $PLOT_H + 12;
+        echo "<text x='$dayX' y='$lblY' text-anchor='middle'>00:00</text>";
 
-            // labels
-            if($isDayBoundary){
-                $dayLabel = gmdate('Y‑m‑d',$ts);
-                echo "<text x='$x' y='".($PAD_T+$PLOT_H+12)."' text-anchor='middle'>$dayLabel</text>";
-            } else {
-                $timeLabel = gmdate('H:i',$ts);
-                echo "<text x='$x' y='".($PAD_T+$PLOT_H+12)."' text-anchor='middle' fill='#888'>$timeLabel</text>";
+        // 3‑hour minor lines (3.21)
+        for($h=3;$h<=21;$h+=3){
+            $x = $dayX + ($h/24)*$DAY_PX;
+            echo "<line x1='$x' y1='$PAD_T' x2='$x' y2='".($PAD_T+$PLOT_H)."' class='grid-3h' />";
+            echo "<text x='$x' y='$lblY' text-anchor='middle' fill='#888'>".sprintf('%02d:00',$h)."</text>";
+            // 12:00 extra day label
+            if($h===12){
+                $dayLabel = gmdate('l j.n.Y', $mid+43200); // +12h
+                echo "<text x='$x' y='".($lblY+12)."' text-anchor='middle' fill='#555'>$dayLabel</text>";
             }
         }
-    ?>
+    endforeach; ?>
 
-    <!-- Metric paths -->
+    <!-- Paths for each metric -->
     <?php foreach ($metrics as $key=>$def):
-        $p = '';
-        foreach ($rows as $idx=>$r) {
-            if (!isset($r[$key])) { continue; }
-            $x = $xCoords[$idx];
-            $y = y($r[$key], $key, $ranges, $PAD_T, $PLOT_H);
-            $p .= ($p===''? 'M':' L').round($x,1).' '.round($y,1);
-        } ?>
+        $p='';
+        foreach ($rows as $i=>$r){
+			if(!isset($r[$key])) continue; $p.=($p?' L':'M').round($xCoords[$i],1).' '.round(y($r[$key],$key,$ranges,$PAD_T,$PLOT_H),1);
+		} ?>
         <path d="<?=$p?>" fill="none" stroke="<?=$def['color']?>" stroke-width="1.5" />
     <?php endforeach; ?>
 
-    <!-- crosshair & intercept dots (added once per metric) -->
-    <line id="vline" class="crosshair" y1="<?=$PAD_T?>" y2="<?=$PAD_T+$PLOT_H?>"/>
-    <line id="hline" class="crosshair" x1="<?=$PAD_L?>" x2="<?=$PAD_L+$PLOT_W?>"/>
-
+    <!-- crosshair & dots -->
+    <line id="vline"   class="crosshair" y1="<?=$PAD_T?>" y2="<?=$PAD_T+$PLOT_H?>" />
+    <line id="hline"   class="crosshair" x1="<?=$PAD_L?>" x2="<?=$PAD_L+$PLOT_W?>" />
     <?php foreach ($metrics as $key=>$def): ?>
         <circle id="dot_<?=$key?>" r="3" fill="<?=$def['color']?>" class="dot" />
         <text   id="label_<?=$key?>" class="tooltip" fill="<?=$def['color']?>"></text>
     <?php endforeach; ?>
 </svg>
+</div>
 
-<!-- Legend -->
 <ul style="list-style:none;padding:0;margin-top:.75rem;display:flex;flex-wrap:wrap;gap:.75rem;">
-    <?php foreach ($metrics as $key=>$def): ?>
-        <li><span style="display:inline-block;width:12px;height:12px;background:<?=$def['color']?>;margin-right:4px;border-radius:2px;"></span><?=$def['label']?></li>
-    <?php endforeach; ?>
+<?php foreach ($metrics as $key=>$def): ?><li><span style="display:inline-block;width:12px;height:12px;background:<?=$def['color']?>;margin-right:4px;border-radius:2px;"></span><?=$def['label']?></li><?php endforeach; ?>
 </ul>
 
 <script>
 (() => {
-    const PAD_L = <?=$PAD_L?>, PAD_T = <?=$PAD_T?>, PAD_R = <?=$PAD_R?>, PAD_B = <?=$PAD_B?>;
-    const plotW = <?=$PLOT_W?>, plotH = <?=$PLOT_H?>;
-    const startTs = <?=$startTs?>, totalHours = <?=$totalH?>;
-
+    const PAD_L = <?=$PAD_L?>, PAD_T = <?=$PAD_T?>, PLOT_H = <?=$PLOT_H?>;
+    const xCoords = <?=json_encode($xCoords)?>;
     const times   = <?=json_encode($times)?>;
     const data    = <?=json_encode($jsSeries)?>;
     const ranges  = <?=json_encode($ranges)?>;
+    const units   = <?=json_encode(array_column($metrics,'unit'))?>;
 
     const svg = document.getElementById('chart');
     const vline = document.getElementById('vline');
     const hline = document.getElementById('hline');
+    const dots = {}, labels = {};
+    Object.keys(data).forEach(k=>{dots[k]=document.getElementById('dot_'+k);labels[k]=document.getElementById('label_'+k);});
 
-    const dots   = {}, labels = {};
-    Object.keys(data).forEach(k => {
-        dots[k]   = document.getElementById('dot_'+k);
-        labels[k] = document.getElementById('label_'+k);
-    });
-
-    function hide(){
-        vline.style.visibility = hline.style.visibility = 'hidden';
-        for (const k in dots){ dots[k].style.visibility = labels[k].style.visibility = 'hidden'; }
-    }
+    function hide(){vline.style.visibility=hline.style.visibility='hidden';Object.values(dots).forEach(d=>d.style.visibility='hidden');Object.values(labels).forEach(l=>l.style.visibility='hidden');}
     hide();
 
     svg.addEventListener('mouseleave', hide);
 
-    svg.addEventListener('mousemove', evt => {
-        const pt = svg.createSVGPoint();
-        pt.x = evt.clientX; pt.y = evt.clientY;
+    svg.addEventListener('mousemove', e=>{
+        const pt = svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
         const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+        if (loc.y < PAD_T || loc.y > PAD_T+PLOT_H) { hide(); return; }
+        // find nearest x‑coord (binary search would be nicer, linear ok here)
+        let idx = 0; let best = Infinity;
+        for(let i=0;i<xCoords.length;i++){
+            const d = Math.abs(xCoords[i]-loc.x); if(d<best){best=d;idx=i;} else if(xCoords[i] > loc.x && d>best) break; }
+        const x = xCoords[idx];
+        if (Math.abs(x-loc.x) > 30) { hide(); return; } // too far from any point
 
-        // inside plot?
-        if (loc.x < PAD_L || loc.x > PAD_L+plotW || loc.y < PAD_T || loc.y > PAD_T+plotH){
-            hide(); return;
-        }
+        vline.setAttribute('x1',x); vline.setAttribute('x2',x); vline.style.visibility='visible';
+        hline.setAttribute('y1',loc.y); hline.setAttribute('y2',loc.y); hline.style.visibility='visible';
 
-        const hour   = (loc.x - PAD_L) / plotW * totalHours;
-        const idx    = Math.round(hour);
-        if (!times[idx]) { hide(); return; }
-
-        const x = PAD_L + ( (times[idx]-startTs)/3600 / totalHours ) * plotW;
-
-        // update crosshair
-        vline.setAttribute('x1',x); vline.setAttribute('x2',x);
-        hline.setAttribute('y1',loc.y); hline.setAttribute('y2',loc.y);
-        vline.style.visibility = hline.style.visibility = 'visible';
-
-        // per‑metric dots + labels
-        Object.keys(data).forEach(key => {
+        Object.keys(data).forEach(key=>{
             const val = data[key][idx];
-            if (val === null || val === undefined) { dots[key].style.visibility = labels[key].style.visibility = 'hidden'; return; }
-
-            const min = ranges[key].min, max = ranges[key].max;
-            const y   = PAD_T + (1 - (val - min)/(max - min))*plotH;
-
-            dots[key].setAttribute('cx',x);
-            dots[key].setAttribute('cy',y);
-            dots[key].style.visibility = 'visible';
-
-            labels[key].setAttribute('x', x + 5);
-            labels[key].setAttribute('y', y - 5);
-            labels[key].textContent = val.toFixed(1);
-            labels[key].style.visibility = 'visible';
+            if(val===null||val===undefined){dots[key].style.visibility=labels[key].style.visibility='hidden';return;}
+            const min=ranges[key].min,max=ranges[key].max;
+            const y = PAD_T + (1-(val-min)/(max-min))*PLOT_H;
+            dots[key].setAttribute('cx',x); dots[key].setAttribute('cy',y); dots[key].style.visibility='visible';
+            labels[key].setAttribute('x',x+5); labels[key].setAttribute('y',y-5);
+            const unit = units[key]||'';
+            const decimals = (unit==='%'?0:1);
+            labels[key].textContent = val.toFixed(decimals)+unit;
+            labels[key].style.visibility='visible';
         });
     });
 })();
