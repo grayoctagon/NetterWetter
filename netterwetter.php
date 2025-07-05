@@ -67,8 +67,8 @@ $firstDayStart = $dayStarts[0];
 // 2.  Prepare metric definitions & ranges
 // ----------------------------------------------------
 $metrics = [
-    'windGust'               => ['label' => 'Wind Gust (m/s)',    'color' => '#BDBDBD', 'unit' => 'm/s',  "strokewidth" => 1.5],
-    'windSpeed'              => ['label' => 'Wind (m/s)',         'color' => '#757575', 'unit' => 'm/s',  "strokewidth" => 1.5],
+    'windGust'               => ['label' => 'Wind Gust (m/s)',    'color' => '#AAA', 'unit' => 'm/s',  "strokewidth" => 1.5],
+    'windSpeed'              => ['label' => 'Wind (m/s)',         'color' => '#FFF', 'unit' => 'm/s',  "strokewidth" => 1.5],
     'humidity'               => ['label' => 'Humidity (%)',       'color' => '#00B0FF', 'unit' => '%',    "strokewidth" => 1.5],
     'precipitationIntensity' => ['label' => 'Precip (mm/h)',      'color' => '#0D47A1', 'unit' => 'mm/h', "strokewidth" => 3],
     'temperatureApparent'    => ['label' => 'Apparent Temp (°C)', 'color' => '#FFD600', 'unit' => '°C',   "strokewidth" => 4],
@@ -76,15 +76,27 @@ $metrics = [
 ];
 
 $ranges = [];
+$airMax=1;
+{
+    $asV = array_column($rows, 'windSpeed');
+    $asV = array_values(array_filter($asV, 'is_numeric'));
+    $agV = array_column($rows, 'windGust');
+    $agV = array_values(array_filter($agV, 'is_numeric'));
+    $airMax=max(max($asV),max($agV));
+}
 foreach ($metrics as $key => $_) {
     $values = array_column($rows, $key);
     $values = array_values(array_filter($values, 'is_numeric'));
+    
 
     // default min/max
     $min = ($key === 'humidity') ? 0 : (count($values) ? min($values) : 0);
-    $max = count($values) ? max($values) : 0;
+    $max = ($key === 'humidity') ? 100 : (count($values) ? max($values) : 0);
     if (in_array($key, ['windSpeed','windGust','precipitationIntensity'], true)) {
         $min = 0;
+    }
+    if (in_array($key, ['windSpeed','windGust'], true)) {
+        $max = $airMax;
     }
     if ($key === 'precipitationIntensity') {
         $max = ceil($max / 2) * 2;              // round to 2 mm/hr grid
@@ -108,11 +120,15 @@ $W      = $PAD_L + $PLOT_W + $PAD_R;      // full SVG width
 $H      = 600;
 
 // X‑coords for every data point
-$xCoords = [];
-foreach ($times as $ts) {
+function convertDaytimeToX($ts){
+    global $firstDayStart, $DAY_PX, $PAD_L;
     $dayIdx = intdiv($ts - $firstDayStart, 86400);
     $secsIntoDay = $ts - ($firstDayStart + $dayIdx*86400);
-    $xCoords[] = $PAD_L + $dayIdx*$DAY_PX + ($secsIntoDay / 86400) * $DAY_PX;
+    return $PAD_L + $dayIdx*$DAY_PX + ($secsIntoDay / 86400) * $DAY_PX;
+}
+$xCoords = [];
+foreach ($times as $ts) {
+    $xCoords[] =convertDaytimeToX($ts);
 }
 
 // Y‑coord helper
@@ -139,11 +155,11 @@ foreach (array_keys($metrics) as $key) {
 <meta charset="utf-8">
 <title>NetterWetter - <?=htmlspecialchars($selectedFile)?></title>
 <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:1rem;}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:1rem;background-color: gray;}
     .file-list{margin-bottom:1rem;}
     .file-list a{margin-right:.5rem;text-decoration:none;padding:.25rem .5rem;border:1px solid #ccc;border-radius:4px;}
     .file-list a.active{background:#1976d2;color:#fff;}
-    svg text{font-size:10px;fill:#555;}
+    /*svg text{font-size:18px;fill:#222;}*/
     .grid-midnight{stroke:#424242;stroke-width:1;}
     .grid-3h   {stroke:#e0e0e0;stroke-width:1;}
     .grid-y    {stroke:#ccc;stroke-width:1;}
@@ -161,50 +177,94 @@ foreach (array_keys($metrics) as $key) {
 </div>
 <div style="overflow-x:auto;">
 <svg id="chart" viewBox="0 0 <?=$W?> <?=$H?>" width="<?=$W?>" height="<?=$H?>">
+    <!-- sunrise sunset -->
+    <g>
+        <linearGradient id="sunrise">
+            <stop offset="0" stop-color="#80808000"/>
+            <stop offset="0.8" stop-color="#ffa50033"/>
+        </linearGradient>
+        <linearGradient id="sunset">
+            <stop offset="0.2" stop-color="#ffa50033"/>
+            <stop offset="1" stop-color="#80808000"/>
+        </linearGradient>
+        <linearGradient id="daylight">
+            <stop offset="0" stop-color="#ffa50033"/>
+            <stop offset="1" stop-color="#ffa50033"/>
+        </linearGradient>
+        <?php 
+            $sunrises = array_column($rows, 'sunriseTime');
+            $sunrises = array_values(array_filter($sunrises, 'is_string'));
+            $sunrises = array_map('strtotime', $sunrises);
+            
+            $sunsets = array_column($rows, 'sunsetTime');
+            $sunsets = array_values(array_filter($sunsets, 'is_string'));
+            $sunsets = array_map('strtotime', $sunsets);
+            
+        ?>
+        <?php foreach ($sunrises as $index=>$sunrise1): ?>
+            <rect name="<?=(date("H:i:s", $sunrise1)."/".$sunrise1)?>" x="<?=convertDaytimeToX($sunrise1)-$DAY_PX/48?>" y="<?=$PAD_T?>" fill="url(#sunrise)" width="<?=$DAY_PX/24?>" height="<?=$PLOT_H?>"/>
+            <text font-size='12px' text-anchor='middle' fill='#ffa500ff' x="<?=convertDaytimeToX($sunrise1)?>" y="<?=$PAD_T+$PLOT_H-4?>"><?=date("H:i", $sunrise1)?></text>
+            
+            <rect x="<?=convertDaytimeToX($sunrise1)+$DAY_PX/48?>" y="<?=$PAD_T?>" fill="url(#daylight)" width="<?=(($DAY_PX/24)*(((isset($sunsets[$index])?$sunsets[$index]:12)-$sunrise1)/60/60-1))?>" height="<?=$PLOT_H?>"/>
+            
+        <?php endforeach; ?>
+        <?php foreach ($sunsets as $sunset1): ?>
+            <rect name="<?=(date("H:i:s", $sunset1)."/".$sunset1)?>" x="<?=convertDaytimeToX($sunset1)-$DAY_PX/48?>" y="<?=$PAD_T?>" fill="url(#sunset)" width="<?=$DAY_PX/24?>" height="<?=$PLOT_H?>"/>
+            <text font-size='12px' text-anchor='middle' fill='#ffa500ff' x="<?=convertDaytimeToX($sunset1)?>" y="<?=$PAD_T+$PLOT_H-4?>"><?=date("H:i", $sunset1)?></text>
+        <?php endforeach; ?>
+    </g>
+    
     <!-- horizontal Y% grid -->
+    <g>
     <?php foreach ([0,25,50,75,100] as $pct):
         $y = $PAD_T + (1 - $pct/100) * $PLOT_H; ?>
         <line x1="<?=$PAD_L?>" y1="<?=$y?>" x2="<?=$PAD_L + $PLOT_W?>" y2="<?=$y?>" class="grid-y" />
     <?php endforeach; ?>
+    </g>
 
     <!-- vertical day + 3h grid & labels -->
+    <g>
     <?php foreach ($dayStarts as $dIdx=>$mid):
         $dayX = $PAD_L + $dIdx*$DAY_PX;
         // midnight line
         echo "<line x1='$dayX' y1='$PAD_T' x2='$dayX' y2='".($PAD_T+$PLOT_H)."' class='grid-midnight' />";
         // label 00:00
-        $lblY = $PAD_T + $PLOT_H + 12;
-        echo "<text x='$dayX' y='$lblY' text-anchor='middle'>00:00</text>";
+        $lblY = $PAD_T + $PLOT_H + 18;
+        echo "<text font-size='18px' x='$dayX' y='$lblY' text-anchor='middle'>00:00</text>";
 
         // 3‑hour minor lines (3.21)
         for($h=3;$h<=21;$h+=3){
             $x = $dayX + ($h/24)*$DAY_PX;
             echo "<line x1='$x' y1='$PAD_T' x2='$x' y2='".($PAD_T+$PLOT_H)."' class='grid-3h' />";
-            echo "<text x='$x' y='$lblY' text-anchor='middle' fill='#888'>".sprintf('%02d:00',$h)."</text>";
+            echo "<text font-size='18px' x='$x' y='$lblY' text-anchor='middle' fill='#222'>".sprintf('%02d:00',$h)."</text>";
             // 12:00 extra day label
             if($h===12){
                 $dayLabel = gmdate('l j.n.Y', $mid+43200); // +12h
-                echo "<text x='$x' y='".($lblY+12)."' text-anchor='middle' fill='#555'>$dayLabel</text>";
+                echo "<text font-size='18px' x='$x' y='".($lblY+18)."' text-anchor='middle' fill='#222'>$dayLabel</text>";
             }
         }
     endforeach; ?>
-
+    </g>
     <!-- Paths for each metric -->
+    <g>
     <?php foreach ($metrics as $key=>$def):
         $p='';
         foreach ($rows as $i=>$r){
 			if(!isset($r[$key])) continue; $p.=($p?' L':'M').round($xCoords[$i],1).' '.round(y($r[$key],$key,$ranges,$PAD_T,$PLOT_H),1);
 		} ?>
-        <path d="<?=$p?>" fill="none" stroke="<?=$def['color']?>" stroke-width="1.5" />
+        <path name="<?=$key?>" d="<?=$p?>" fill="none" stroke="<?=$def['color']?>" stroke-width="<?=$def['strokewidth']?>" />
     <?php endforeach; ?>
+    </g>
 
     <!-- crosshair & dots -->
+    <g>
     <line id="vline"   class="crosshair" y1="<?=$PAD_T?>" y2="<?=$PAD_T+$PLOT_H?>" />
     <line id="hline"   class="crosshair" x1="<?=$PAD_L?>" x2="<?=$PAD_L+$PLOT_W?>" />
     <?php foreach ($metrics as $key=>$def): ?>
         <circle id="dot_<?=$key?>" r="3" fill="<?=$def['color']?>" class="dot" />
-        <text   id="label_<?=$key?>" class="tooltip" fill="<?=$def['color']?>"></text>
+        <text font-size='18px' id="label_<?=$key?>" class="tooltip" fill="<?=$def['color']?>"></text>
     <?php endforeach; ?>
+    </g>
 </svg>
 </div>
 
